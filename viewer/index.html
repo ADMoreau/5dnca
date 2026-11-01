@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NCA Slice Viewer</title>
+<style>
+  :root {
+    --bg: #0e1014; --panel: rgba(22, 25, 31, 0.92); --line: #2c313b;
+    --text: #e6e8ec; --muted: #9aa1ad; --accent: #7aa2ff; --warn: #ffb36b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+  #view { position: fixed; inset: 0; }
+  #panel { position: fixed; top: 12px; left: 12px; width: 300px; max-height: calc(100% - 24px);
+    overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; backdrop-filter: blur(6px); }
+  h1 { font-size: 14px; margin: 0 0 8px; font-weight: 600; }
+  .row { margin: 10px 0; }
+  .row label { display: flex; justify-content: space-between; color: var(--muted); margin-bottom: 3px; }
+  .row label b { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  select, button { width: 100%; background: #1b1f27; color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 8px; font: inherit; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  .inline { display: flex; gap: 6px; }
+  .inline > * { flex: 1; }
+  .check { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .stats { color: var(--muted); font-variant-numeric: tabular-nums; border-top: 1px solid var(--line);
+    padding-top: 8px; margin-top: 10px; white-space: pre-line; }
+  .hint { color: var(--muted); font-size: 12px; }
+  #error { color: var(--warn); white-space: pre-line; }
+  #drop { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(122, 162, 255, 0.12); border: 2px dashed var(--accent); font-size: 18px; pointer-events: none; }
+  body.dragging #drop { display: flex; }
+  @media (max-width: 600px) {
+    #panel { top: auto; bottom: 0; left: 0; right: 0; width: auto; max-height: 45%; border-radius: 10px 10px 0 0; }
+  }
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div id="panel">
+  <h1>NCA slice viewer</h1>
+  <div class="row">
+    <select id="run" aria-label="Run"><option>Loading runs…</option></select>
+  </div>
+  <div class="row inline">
+    <button id="open">Open .npy…</button>
+    <input id="file" type="file" accept=".npy" hidden>
+  </div>
+  <div id="error"></div>
+
+  <div class="row">
+    <label>Growth step <b id="tval">0</b></label>
+    <input id="t" type="range" min="0" max="0" value="0" step="1">
+    <div class="inline" style="margin-top:6px">
+      <button id="play">Play</button>
+      <select id="fps" aria-label="Playback speed">
+        <option value="5">5 steps/s</option><option value="15" selected>15 steps/s</option>
+        <option value="30">30 steps/s</option><option value="60">60 steps/s</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="extras"></div>
+
+  <div class="row">
+    <label>Cut away x &gt; <b id="cutval">all</b></label>
+    <input id="cut" type="range" min="0" max="1" value="1" step="1">
+  </div>
+  <div class="row">
+    <label>Hide cells with alpha below <b id="minaval">0.10</b></label>
+    <input id="mina" type="range" min="0" max="0.9" value="0.1" step="0.01">
+  </div>
+  <div class="row check"><input id="sizeA" type="checkbox" checked><label for="sizeA" style="margin:0">Cube size shows alpha</label></div>
+  <div class="row check"><input id="snap" type="checkbox"><label for="snap" style="margin:0">Snap extra axes to whole cells</label></div>
+  <div class="row"><button id="reset">Reset camera</button></div>
+
+  <div class="stats" id="stats"></div>
+  <p class="hint">Drag to orbit, scroll to zoom. URL options: ?run=&amp;t=&amp;w=&amp;v=&amp;cut=. Keys: space plays, ←/→ step time, ↑/↓ move along w, [ / ] move along v.
+  Between whole cells the extra axes blend neighbouring slices linearly.</p>
+</div>
+<div id="drop">Drop a growth_rgba.npy file</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script>
+  // Plain script: runs even if the module below can't load, and reports why.
+  function viewerError(msg) {
+    const el = document.getElementById("error");
+    if (el) el.textContent = msg;
+    const sel = document.getElementById("run");
+    if (sel && sel.options.length === 1 && sel.options[0].textContent.startsWith("Loading")) sel.options[0].textContent = "Viewer failed to start";
+  }
+  addEventListener("error", (e) => window.viewerFatal || viewerError("Error: " + (e.message || e.error || "script failed") + "\nOpen the browser console (F12) for details."));
+  addEventListener("unhandledrejection", (e) => viewerError("Error: " + (e.reason?.message || e.reason)));
+  setTimeout(() => {
+    if (!window.viewerStarted) viewerError(
+      "The viewer script didn't start after 8 seconds. Common causes:\n" +
+      "• three.js couldn't be downloaded from cdn.jsdelivr.net (offline, or blocked by an extension)\n" +
+      "• the browser doesn't support JavaScript import maps (needs Chrome 89+, Firefox 108+, Safari 16.4+)\n" +
+      "Open the browser console (F12) for the exact error.");
+  }, 8000);
+</script>
+<script type="module" onerror="viewerError('Couldn\'t load three.js from cdn.jsdelivr.net. Check the network or ad blocker, then reload.')">
+window.viewerStarted = true;
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const $ = (id) => document.getElementById(id);
+
+// ------------------------------------------------------------------ .npy
+function parseNpy(buf) {
+  const u8 = new Uint8Array(buf);
+  const magic = String.fromCharCode(...u8.slice(1, 6));
+  if (u8[0] !== 0x93 || magic !== "NUMPY") throw new Error("Not a .npy file.");
+  const dv = new DataView(buf);
+  const major = u8[6];
+  const [hlen, off] = major === 1 ? [dv.getUint16(8, true), 10] : [dv.getUint32(8, true), 12];
+  const header = new TextDecoder().decode(u8.slice(off, off + hlen));
+  const descr = /'descr':\s*'([^']+)'/.exec(header)?.[1];
+  if (descr !== "|u1" && descr !== "<u1") throw new Error(`Expected uint8 data, got ${descr}.`);
+  if (/'fortran_order':\s*True/.test(header)) throw new Error("Fortran-order arrays aren't supported.");
+  const shape = /'shape':\s*\(([^)]*)\)/.exec(header)[1].split(",").map((s) => s.trim()).filter(Boolean).map(Number);
+  return { shape, data: new Uint8Array(buf, off + hlen) };
+}
+
+// ------------------------------------------------------------------ scene
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+} catch (err) {
+  viewerError("WebGL isn't available in this browser, so the 3D view can't draw.\n" +
+    "Try enabling hardware acceleration in the browser settings, or use another browser.\n(" + err.message + ")");
+  window.viewerFatal = true;
+  throw err;
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+$("view").appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1014);
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 1000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x404858, 2.2));
+const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+sun.position.set(3, 5, 4);
+scene.add(sun);
+
+const volume = new THREE.Group();   // holds the voxels and the bounding box
+scene.add(volume);
+let mesh = null, frame = null;
+
+// ------------------------------------------------------------------ data state
+let D = null;   // { T, grid, extras: [{name, size}], Z, Y, X, data, strides }
+const state = { t: 0, ex: [], cut: 0, mina: 0.1 };
+let initial = null;  // optional ?w= ?v= ?cut= from the URL
+
+function load(shape, data, label) {
+  if (shape.length < 3 || shape[shape.length - 1] !== 4)
+    throw new Error(`Expected shape (T, ...grid, 4), got (${shape.join(", ")}).`);
+  const T = shape[0];
+  let grid = shape.slice(1, -1);
+  if (grid.length === 2) grid = [1, ...grid];          // 2D: one flat layer
+  const k = grid.length - 3;
+  const names = ["u", "v", "w"].slice(3 - k);          // the extra axis next to z is w
+  // Strides for indexing [t, ...grid, channel]; st[0] is one frame.
+  const full = [T, ...grid, 4];
+  const st = new Array(full.length);
+  st[full.length - 1] = 1;
+  for (let i = full.length - 2; i >= 0; i--) st[i] = st[i + 1] * full[i + 1];
+  const [Z, Y, X] = grid.slice(-3);
+  D = { T, grid, k, extras: grid.slice(0, k).map((size, i) => ({ name: names[i], size })), Z, Y, X, data, st, label };
+  state.t = initial?.t != null ? Math.min(+initial.t, T - 1) : T - 1;  // open on the grown shape
+  state.ex = D.extras.map((e) => (e.size - 1) / 2);
+  state.cut = X - 1;
+  if (initial) {  // URL parameters, applied to the first load only
+    if (initial.w != null && D.extras.length) state.ex[D.extras.length - 1] = Math.min(+initial.w, D.extras.at(-1).size - 1);
+    if (initial.v != null && D.extras.length > 1) state.ex[D.extras.length - 2] = Math.min(+initial.v, D.extras.at(-2).size - 1);
+    if (initial.cut != null) state.cut = Math.min(+initial.cut, X - 1);
+    initial = null;
+  }
+  buildMesh();
+  buildControls();
+  resetCamera();
+  update();
+}
+
+function buildMesh() {
+  if (mesh) { volume.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); }
+  const n = D.Z * D.Y * D.X;
+  mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial(), n);
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  mesh.setColorAt(0, new THREE.Color());
+  volume.add(mesh);
+  if (frame) volume.remove(frame);
+  const box = new THREE.BoxGeometry(D.X, D.Y, D.Z);
+  frame = new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: 0x3a4150 }));
+  volume.add(frame);
+}
+
+function buildControls() {
+  $("t").max = D.T - 1; $("t").value = state.t;
+  $("cut").max = D.X - 1; $("cut").value = state.cut;
+  const wrap = $("extras");
+  wrap.innerHTML = "";
+  D.extras.forEach((e, i) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = `<label>Slice position along ${e.name} <b id="exval${i}"></b></label>
+      <input id="ex${i}" type="range" min="0" max="${e.size - 1}" step="0.01" value="${state.ex[i]}">`;
+    wrap.appendChild(row);
+    row.querySelector("input").addEventListener("input", (ev) => { setExtra(i, +ev.target.value); });
+  });
+  syncLabels();
+}
+
+function setExtra(i, v) {
+  const e = D.extras[i];
+  v = Math.max(0, Math.min(e.size - 1, v));
+  if ($("snap").checked) v = Math.round(v);
+  state.ex[i] = v;
+  $(`ex${i}`).value = v;
+  update();
+}
+
+function syncLabels() {
+  $("tval").textContent = `${state.t} / ${D.T - 1}`;
+  D.extras.forEach((e, i) => { $(`exval${i}`).textContent = `${state.ex[i].toFixed(2)} of ${e.size - 1}`; });
+  $("cutval").textContent = state.cut >= D.X - 1 ? "nothing cut" : `${state.cut}`;
+  $("minaval").textContent = state.mina.toFixed(2);
+}
+
+// ------------------------------------------------------------------ voxel update
+const m4 = new THREE.Matrix4(), col = new THREE.Color(), pos = new THREE.Vector3(),
+      quat = new THREE.Quaternion(), scl = new THREE.Vector3();
+
+function update() {
+  if (!D) return;
+  const { data, st, k, Z, Y, X } = D;
+  // Corners of the cell the fractional extra-axis position falls in, with multilinear weights.
+  const corners = [];
+  for (let mask = 0; mask < (1 << k); mask++) {
+    let off = state.t * st[0], w = 1;
+    for (let i = 0; i < k; i++) {
+      const v = state.ex[i], lo = Math.floor(v), f = v - lo;
+      const hi = Math.min(lo + 1, D.extras[i].size - 1);
+      const bit = (mask >> i) & 1;
+      off += (bit ? hi : lo) * st[1 + i];
+      w *= bit ? f : 1 - f;
+    }
+    if (w > 0) corners.push([off, w / 255]);
+  }
+  const sz = st[1 + k], sy = st[2 + k];  // strides of z and y (x stride is 4)
+  const sizeA = $("sizeA").checked;
+  let n = 0, alphaSum = 0;
+  for (let z = 0; z < Z; z++) for (let y = 0; y < Y; y++) for (let x = 0; x <= state.cut; x++) {
+    let r = 0, g = 0, b = 0, a = 0;
+    const cell = z * sz + y * sy + x * 4;
+    for (const [off, w] of corners) {
+      const p = off + cell;
+      r += data[p] * w; g += data[p + 1] * w; b += data[p + 2] * w; a += data[p + 3] * w;
+    }
+    if (a < state.mina || a <= 0) continue;
+    alphaSum += a;
+    const s = sizeA ? 0.25 + 0.7 * Math.min(a, 1) : 0.95;
+    pos.set(x - (X - 1) / 2, (Y - 1) / 2 - y, z - (Z - 1) / 2);
+    scl.set(s, s, s);
+    m4.compose(pos, quat, scl);
+    mesh.setMatrixAt(n, m4);
+    // stored colour is premultiplied by alpha
+    col.setRGB(Math.min(r / a, 1), Math.min(g / a, 1), Math.min(b / a, 1), THREE.SRGBColorSpace);
+    mesh.setColorAt(n, col);
+    n++;
+  }
+  mesh.count = n;
+  mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  syncLabels();
+  const gridStr = D.grid.length === 3 && D.grid[0] === 1 ? `${D.Y}×${D.X} (2D)` : D.grid.join("×");
+  $("stats").textContent =
+    `${D.label}\ngrid ${gridStr} · ${D.T} steps\n` +
+    `axes: ${[...D.extras.map((e) => e.name), "z", "y", "x"].join(", ")}\n` +
+    `visible cells ${n} · total alpha ${alphaSum.toFixed(1)}`;
+}
+
+function resetCamera() {
+  const r = Math.max(D.X, D.Y, D.Z);
+  if (D.Z === 1) camera.position.set(0, 0, r * 1.6);   // 2D data: face it head-on
+  else camera.position.set(r * 1.3, r * 0.9, r * 1.9);
+  controls.target.set(0, 0, 0);
+  controls.update();
+}
+
+// ------------------------------------------------------------------ inputs
+$("t").addEventListener("input", (e) => { state.t = +e.target.value; update(); });
+$("cut").addEventListener("input", (e) => { state.cut = +e.target.value; update(); });
+$("mina").addEventListener("input", (e) => { state.mina = +e.target.value; update(); });
+$("sizeA").addEventListener("change", update);
+$("snap").addEventListener("change", () => D && D.extras.forEach((_, i) => setExtra(i, state.ex[i])));
+$("reset").addEventListener("click", () => D && resetCamera());
+
+let playing = false, lastTick = 0;
+function setPlaying(p) {
+  playing = p && !!D;
+  $("play").textContent = playing ? "Pause" : "Play";
+  if (playing && state.t >= D.T - 1) { state.t = 0; $("t").value = 0; update(); }
+}
+$("play").addEventListener("click", () => setPlaying(!playing));
+
+function stepTime(d) {
+  if (!D) return;
+  state.t = Math.max(0, Math.min(D.T - 1, state.t + d));
+  $("t").value = state.t;
+  update();
+}
+addEventListener("keydown", (e) => {
+  if (!D || e.target.tagName === "SELECT") return;
+  const ext = (name) => D.extras.findIndex((x) => x.name === name);
+  const nudge = (name, d) => { const i = ext(name); if (i >= 0) { setExtra(i, state.ex[i] + d); e.preventDefault(); } };
+  if (e.key === " ") { setPlaying(!playing); e.preventDefault(); }
+  else if (e.key === "ArrowRight") { stepTime(1); e.preventDefault(); }
+  else if (e.key === "ArrowLeft") { stepTime(-1); e.preventDefault(); }
+  else if (e.key === "ArrowUp") nudge("w", 0.25);
+  else if (e.key === "ArrowDown") nudge("w", -0.25);
+  else if (e.key === "]") nudge("v", 0.25);
+  else if (e.key === "[") nudge("v", -0.25);
+});
+
+// ------------------------------------------------------------------ loading
+function showError(msg) { $("error").textContent = msg || ""; }
+
+async function loadUrl(url, label) {
+  showError("");
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${res.status} loading ${url}`);
+    const { shape, data } = parseNpy(await res.arrayBuffer());
+    load(shape, data, label);
+  } catch (err) { showError(err.message); }
+}
+
+async function loadFile(file) {
+  showError("");
+  try {
+    const { shape, data } = parseNpy(await file.arrayBuffer());
+    $("run").value = "";
+    load(shape, data, file.name);
+  } catch (err) { showError(err.message); }
+}
+
+$("open").addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", (e) => e.target.files[0] && loadFile(e.target.files[0]));
+addEventListener("dragover", (e) => { e.preventDefault(); document.body.classList.add("dragging"); });
+addEventListener("dragleave", (e) => { if (!e.relatedTarget) document.body.classList.remove("dragging"); });
+addEventListener("drop", (e) => {
+  e.preventDefault(); document.body.classList.remove("dragging");
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+
+async function init() {
+  const params = new URLSearchParams(location.search);
+  initial = { t: params.get("t"), w: params.get("w"), v: params.get("v"), cut: params.get("cut") };
+  let runs = [];
+  try {
+    const res = await fetch("/api/runs");
+    if (res.ok) runs = await res.json();
+  } catch { /* opened without serve.py */ }
+  const sel = $("run");
+  if (!runs.length) {
+    sel.innerHTML = `<option value="">No runs listed (start serve.py, or open a file)</option>`;
+  } else {
+    sel.innerHTML = `<option value="">Choose a run…</option>` + runs.map((r) =>
+      `<option value="${r.path}">${r.name} · ${r.grid.join("×")} · ${r.frames} steps</option>`).join("");
+  }
+  sel.addEventListener("change", () => sel.value && loadUrl(sel.value, sel.selectedOptions[0].textContent.split(" · ")[0]));
+  const wanted = params.get("run");
+  const pick = runs.find((r) => r.name === wanted) || runs.find((r) => r.grid.length === 4) || runs[0];
+  if (pick) { sel.value = pick.path; loadUrl(pick.path, pick.name); }
+}
+
+// ------------------------------------------------------------------ loop
+renderer.setAnimationLoop((now) => {
+  if (playing && D && now - lastTick > 1000 / +$("fps").value) {
+    lastTick = now;
+    if (state.t >= D.T - 1) setPlaying(false); else stepTime(1);
+  }
+  controls.update();
+  renderer.render(scene, camera);
+});
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# Training outputs (models, logs, recordings); regenerate with train*.py
+runs/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
