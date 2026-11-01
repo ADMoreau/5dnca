@@ -99,3 +99,7 @@ Each run writes to `runs/<name>/`:
 
 - Mordvintsev, Randazzo, Niklasson and Levin, [Growing Neural Cellular Automata](https://distill.pub/2020/growing-ca), Distill 2020.
 - Lizard target: `data/lizard_128.png` is the 🦎 emoji from [Noto Emoji](https://github.com/googlefonts/noto-emoji) v2.047, Apache License 2.0.
+
+## License
+
+MIT; see [LICENSE](LICENSE). The lizard image in `data/` keeps its own Apache 2.0 licence (Noto Emoji).
