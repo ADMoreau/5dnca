@@ -80,7 +80,7 @@
   <div class="row"><button id="reset">Reset camera</button></div>
 
   <div class="stats" id="stats"></div>
-  <p class="hint">Drag to orbit, scroll to zoom. URL options: ?run=&amp;t=&amp;w=&amp;v=&amp;cut=. Keys: space plays, ←/→ step time, ↑/↓ move along w, [ / ] move along v.
+  <p class="hint">Drag to orbit, scroll to zoom. URL options: ?run=&amp;t=&amp;w=&amp;v=&amp;cut=&amp;branch=. Keys: space plays, ←/→ step time, ↑/↓ move along w, [ / ] move along v (or switch branch on a tree).
   Between whole cells the extra axes blend neighbouring slices linearly.</p>
 </div>
 <div id="drop">Drop a growth_rgba.npy file</div>
@@ -162,10 +162,22 @@ let mesh = null, frame = null;
 
 // ------------------------------------------------------------------ data state
 let D = null;   // { T, grid, extras: [{name, size}], Z, Y, X, data, strides }
-const state = { t: 0, ex: [], cut: 0, mina: 0.1 };
+const state = { t: 0, ex: [], cut: 0, mina: 0.1, branch: 0 };
 let initial = null;  // optional ?w= ?v= ?cut= from the URL
 
-function load(shape, data, label) {
+function treePaths(tree) {
+  // Root-to-leaf node lists, one per branch, ordered by branch id.
+  const isParent = new Set(tree.parent);
+  const leaves = tree.parent.map((_, i) => i).filter((i) => !isParent.has(i));
+  leaves.sort((a, b) => tree.node_branch[a] - tree.node_branch[b]);
+  return leaves.map((leaf) => {
+    const path = [];
+    for (let n = leaf; n >= 0; n = tree.parent[n]) path.push(n);
+    return path.reverse();
+  });
+}
+
+function load(shape, data, label, tree = null) {
   if (shape.length < 3 || shape[shape.length - 1] !== 4)
     throw new Error(`Expected shape (T, ...grid, 4), got (${shape.join(", ")}).`);
   const T = shape[0];
@@ -179,7 +191,18 @@ function load(shape, data, label) {
   st[full.length - 1] = 1;
   for (let i = full.length - 2; i >= 0; i--) st[i] = st[i + 1] * full[i + 1];
   const [Z, Y, X] = grid.slice(-3);
-  D = { T, grid, k, extras: grid.slice(0, k).map((size, i) => ({ name: names[i], size })), Z, Y, X, data, st, label };
+  D = { T, grid, k, extras: grid.slice(0, k).map((size, i) => ({ name: names[i], size })), Z, Y, X, data, st, label, tree: null };
+  // Offset of index idx along extra axis i. A tree replaces its node axis with w,
+  // and w maps to a node through the chosen branch's root-to-leaf path.
+  D.axisOffset = (i, idx) => idx * st[1 + i];
+  if (tree) {
+    if (k !== 1) throw new Error("A tree layout needs data shaped (T, nodes, Z, Y, X, 4).");
+    const paths = treePaths(tree);
+    D.tree = { paths, labels: tree.branch_labels || paths.map((_, b) => `branch ${b}`), fork: tree.fork_w };
+    D.extras = [{ name: "w", size: paths[0].length }];
+    D.axisOffset = (i, idx) => D.tree.paths[state.branch][idx] * st[1];
+    state.branch = Math.min(initial?.branch != null ? +initial.branch : state.branch || 0, paths.length - 1);
+  }
   state.t = initial?.t != null ? Math.min(+initial.t, T - 1) : T - 1;  // open on the grown shape
   state.ex = D.extras.map((e) => (e.size - 1) / 2);
   state.cut = X - 1;
@@ -213,6 +236,15 @@ function buildControls() {
   $("cut").max = D.X - 1; $("cut").value = state.cut;
   const wrap = $("extras");
   wrap.innerHTML = "";
+  if (D.tree) {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = `<label>Branch <b>forks at w = ${D.tree.fork}</b></label>
+      <select id="branch" aria-label="Branch">${D.tree.labels.map((l, b) =>
+        `<option value="${b}" ${b === state.branch ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+    wrap.appendChild(row);
+    row.querySelector("select").addEventListener("change", (ev) => setBranch(+ev.target.value));
+  }
   D.extras.forEach((e, i) => {
     const row = document.createElement("div");
     row.className = "row";
@@ -222,6 +254,14 @@ function buildControls() {
     row.querySelector("input").addEventListener("input", (ev) => { setExtra(i, +ev.target.value); });
   });
   syncLabels();
+}
+
+function setBranch(b) {
+  if (!D?.tree) return;
+  const n = D.tree.paths.length;
+  state.branch = ((b % n) + n) % n;
+  $("branch").value = state.branch;
+  update();
 }
 
 function setExtra(i, v) {
@@ -255,7 +295,7 @@ function update() {
       const v = state.ex[i], lo = Math.floor(v), f = v - lo;
       const hi = Math.min(lo + 1, D.extras[i].size - 1);
       const bit = (mask >> i) & 1;
-      off += (bit ? hi : lo) * st[1 + i];
+      off += D.axisOffset(i, bit ? hi : lo);
       w *= bit ? f : 1 - f;
     }
     if (w > 0) corners.push([off, w / 255]);
@@ -286,9 +326,12 @@ function update() {
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   syncLabels();
-  const gridStr = D.grid.length === 3 && D.grid[0] === 1 ? `${D.Y}×${D.X} (2D)` : D.grid.join("×");
+  const gridStr = D.tree ? `tree of ${D.grid[0]} nodes, each ${D.Z}×${D.Y}×${D.X}`
+    : D.grid.length === 3 && D.grid[0] === 1 ? `${D.Y}×${D.X} (2D)` : D.grid.join("×");
+  const where = !D.tree ? "" : Math.floor(state.ex[0]) < D.tree.fork - 1
+    ? "on the trunk (shared by every branch)\n" : `on ${D.tree.labels[state.branch]}\n`;
   $("stats").textContent =
-    `${D.label}\ngrid ${gridStr} · ${D.T} steps\n` +
+    `${D.label}\n${gridStr} · ${D.T} ${D.T === 1 ? "frame (exact target)" : "steps"}\n` + where +
     `axes: ${[...D.extras.map((e) => e.name), "z", "y", "x"].join(", ")}\n` +
     `visible cells ${n} · total alpha ${alphaSum.toFixed(1)}`;
 }
@@ -332,20 +375,20 @@ addEventListener("keydown", (e) => {
   else if (e.key === "ArrowLeft") { stepTime(-1); e.preventDefault(); }
   else if (e.key === "ArrowUp") nudge("w", 0.25);
   else if (e.key === "ArrowDown") nudge("w", -0.25);
-  else if (e.key === "]") nudge("v", 0.25);
-  else if (e.key === "[") nudge("v", -0.25);
+  else if (e.key === "]") D.tree ? setBranch(state.branch + 1) : nudge("v", 0.25);
+  else if (e.key === "[") D.tree ? setBranch(state.branch - 1) : nudge("v", -0.25);
 });
 
 // ------------------------------------------------------------------ loading
 function showError(msg) { $("error").textContent = msg || ""; }
 
-async function loadUrl(url, label) {
+async function loadUrl(url, label, tree = null) {
   showError("");
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`${res.status} loading ${url}`);
     const { shape, data } = parseNpy(await res.arrayBuffer());
-    load(shape, data, label);
+    load(shape, data, label, tree);
   } catch (err) { showError(err.message); }
 }
 
@@ -369,7 +412,7 @@ addEventListener("drop", (e) => {
 
 async function init() {
   const params = new URLSearchParams(location.search);
-  initial = { t: params.get("t"), w: params.get("w"), v: params.get("v"), cut: params.get("cut") };
+  initial = { t: params.get("t"), w: params.get("w"), v: params.get("v"), cut: params.get("cut"), branch: params.get("branch") };
   let runs = [];
   try {
     const res = await fetch("/api/runs");
@@ -380,12 +423,16 @@ async function init() {
     sel.innerHTML = `<option value="">No runs listed (start serve.py, or open a file)</option>`;
   } else {
     sel.innerHTML = `<option value="">Choose a run…</option>` + runs.map((r) =>
-      `<option value="${r.path}">${r.name} · ${r.grid.join("×")} · ${r.frames} steps</option>`).join("");
+      `<option value="${r.path}">${r.name} · ${r.tree ? `tree, ${r.grid[0]} nodes` : r.grid.join("×")}${r.frames > 1 ? ` · ${r.frames} steps` : ""}</option>`).join("");
   }
-  sel.addEventListener("change", () => sel.value && loadUrl(sel.value, sel.selectedOptions[0].textContent.split(" · ")[0]));
+  const byPath = Object.fromEntries(runs.map((r) => [r.path, r]));
+  sel.addEventListener("change", () => {
+    const r = byPath[sel.value];
+    if (r) loadUrl(r.path, r.name, r.tree || null);
+  });
   const wanted = params.get("run");
   const pick = runs.find((r) => r.name === wanted) || runs.find((r) => r.grid.length === 4) || runs[0];
-  if (pick) { sel.value = pick.path; loadUrl(pick.path, pick.name); }
+  if (pick) { sel.value = pick.path; loadUrl(pick.path, pick.name, pick.tree || null); }
 }
 
 // ------------------------------------------------------------------ loop

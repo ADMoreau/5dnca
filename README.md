@@ -26,7 +26,7 @@ A 12⁴ grid, with a target ball coloured red to blue along `w` so the NCA has t
 
 Three of four growths reach an error of 10^-3.9 and hold it to step 600. The NCA also becomes nearly mirror-symmetric in z, y and x, which nothing in the training asked for.
 
-That first 4D model stops growing by sensing the edges of its training grid, so it overgrows a bigger world. It is being retrained with wrap-around edges and damage (regeneration) training; `eval_world.py` checks the result.
+That first 4D model stopped growing by sensing the edges of its training grid, so it overgrew a bigger world. Retrained with wrap-around edges and damage training (training error 10^-5.3), it passes `eval_world.py`. Three seeds in a 12×24×24×24 world grow three separate balls of the right size (total 99.4% of three targets), and the balls never merge or reach the world's edge in 800 steps. After half of one ball is erased, it regrows from about 52% to about 81% of its size within 25 steps, then creeps up to about 90% by step 800.
 
 ### Viewer
 
@@ -68,13 +68,18 @@ Each run writes to `runs/<name>/`:
 
 | File | What it does |
 |---|---|
-| `nca.py` | The NCA for any number of dimensions: perception (`sobel` or `isotropic`), alive mask, update rule, optional gradient checkpointing |
+| `nca.py` | The NCA for any number of dimensions: perception (`sobel` or `isotropic`), alive mask, update rule, optional gradient checkpointing, optional one-way (causal) time axis |
 | `train_lizard.py` | Reproduces the 2D Distill lizard (reference run) |
-| `train.py` | Trains on n-D targets (ball, shell) with pool training, optional damage and wrap-around edges |
+| `train.py` | Trains on n-D targets (ball, shell) with pool training, optional damage and wrap-around edges; `--levels` swaps in the hierarchical NCA |
+| `bounce.py` | Exact bouncing-ball targets: the 5D lattice and the tree that forks at the first impact |
+| `hier_nca.py` | A hierarchical NCA: coarser copies of the grid pass a summary up and context back down within every step, so one step reaches 7–10 cells with 3 levels instead of 1. Time is never coarsened. The blocks move by a random offset every step, so they can't serve as a coordinate grid. The state is still one grid, so it drops into the training scripts |
+| `tree_nca.py` | A 4D NCA whose `w` axis is a tree (parent and children as the `w` neighbours); on a chain it equals the 4D NCA |
+| `train_bounce.py` | Trains the bouncing-ball comparison: `--mode lattice`, `tree`, `tree-down` (one-way links) or `independent` |
+| `train_forecast.py` | Forecasts the bounce from the observed fall with unknown bounciness: K candidate futures trained with the energy score, `--mode lattice` (candidates see each other), `independent`, or `tree` (one shared fall, candidates branch at the impact) |
 | `eval_world.py` | Runs a trained model in a bigger world with several seeds; checks size, separation and regrowth |
 | `serve.py` | Local server for the viewer (127.0.0.1 only); lists runs at `/api/runs` |
 | `viewer/index.html` | three.js viewer: growth-step scrubbing, extra-axis sliders with blending, cut-away, alpha threshold |
-| `tests/` | Checks the n-D operators against `conv2d`/`conv3d`/`max_pool` and brute-force 3ⁿ stencils in 4D/5D, plus sparse, dense and checkpointed equivalence |
+| `tests/` | Checks the n-D operators against `conv2d`/`conv3d`/`max_pool` and brute-force 3ⁿ stencils in 4D/5D, sparse/dense/checkpointed equivalence, the bounce physics, the tree NCA against the 4D NCA, one-way time, the hierarchical NCA's pooling, reach and one-way time, and the energy score and forecast setup |
 
 ## Implementation notes
 
@@ -92,6 +97,7 @@ Each run writes to `runs/<name>/`:
   
   Compare both against independent runs on fit, regrowth and damage leaking between branches.
 - Does information flowing backward along `w` reshape the trunk? Compare two-way and parent-to-child links in the tree.
+- Hierarchical NCA (`hier_nca.py`). First 4D ball run (`ball4d_r35_wrap_L3`, 12⁴ box, fixed blocks): 10× lower error than the flat model and full regrowth, but it learned the box. Its ball snapped to multiples of 4 cells instead of following the seed, and outside the box (bigger world or zero padding) it grew to only 82–86% size, with neighbouring balls pushing each other bigger without touching. In a 12⁴ box every coarse cell holds part of the ball, so the coarse levels never see empty space. Rerun with moving blocks in a 16⁴ box against a flat control at 16⁴ (`ball4d_s16_r35_wrap_L3s`, `ball4d_s16_r35_wrap`; 1000 steps, batch 4): the ball now follows its seed and grows to full size in any world, error is 2.6× lower than flat at equal steps, it grows faster and regrows half a ball in 25 steps (flat: still short after 100), at 1.8× the cost per step (about even at equal training time). Balls 2 cells apart change each other's size (91–117% together, 100% alone) without touching. Next: a task where reach matters, and several balls in training if interaction should be controlled.
 - Live viewer mode: click to plant new seeds or erase regions while the model runs.
 - Larger grids (16⁴, 5D) on a GPU.
 

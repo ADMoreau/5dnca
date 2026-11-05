@@ -28,10 +28,7 @@ import train
 def load_model(run: Path) -> tuple[nca.NCA, dict]:
     ck = torch.load(run / "model.pt")
     cfg = ck.get("config") or ck["args"]
-    ndim = cfg.get("ndim", 2)
-    model = nca.NCA(ndim, cfg.get("channels", 16), cfg.get("hidden", 128),
-                    perception=cfg.get("perception", "sobel"), padding="zeros",
-                    skip_dead=not cfg.get("dense", ndim == 2), compile=ndim >= 3)
+    model = train.build_model(cfg, "zeros", compile=cfg.get("ndim", 2) >= 3)
     model.load_state_dict(ck["model"])
     return model.eval(), cfg
 

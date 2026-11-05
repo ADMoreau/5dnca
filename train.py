@@ -20,6 +20,7 @@ import torch
 from PIL import Image
 
 import nca
+from hier_nca import HierNCA
 
 ROOT = Path(__file__).resolve().parent
 
@@ -97,6 +98,19 @@ def save_atlas(x: torch.Tensor, path: Path, scale: int = 4) -> None:
 
 # ---------------------------------------------------------------- training
 
+def build_model(cfg: dict, padding: str, compile: bool) -> nca.NCA:
+    """The flat NCA, or the hierarchical one when cfg asks for more than one level."""
+    ndim = cfg.get("ndim", 2)
+    kw = dict(perception=cfg.get("perception", "sobel"), padding=padding,
+              skip_dead=not cfg.get("dense", ndim == 2), compile=compile)
+    if cfg.get("levels", 1) > 1:
+        # Runs from before shift_blocks existed were trained with fixed blocks.
+        return HierNCA(ndim, cfg.get("channels", 16), cfg.get("hidden", 128), levels=cfg["levels"],
+                       context=cfg.get("context", 16), coarse_hidden=cfg.get("coarse_hidden", 32),
+                       shift_blocks=cfg.get("shift_blocks", False), **kw)
+    return nca.NCA(ndim, cfg.get("channels", 16), cfg.get("hidden", 128), **kw)
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--ndim", type=int, default=4)
@@ -112,6 +126,12 @@ def main() -> None:
     p.add_argument("--hidden", type=int, default=128)
     p.add_argument("--perception", choices=["sobel", "isotropic"], default="sobel")
     p.add_argument("--padding", choices=["zeros", "circular"], default="zeros")
+    p.add_argument("--levels", type=int, default=1,
+                   help="hierarchy levels counting the fine grid (1 = the flat NCA); see hier_nca.py")
+    p.add_argument("--context", type=int, default=16, help="channels each coarse level passes down")
+    p.add_argument("--coarse-hidden", type=int, default=32, help="hidden units of each coarse level's network")
+    p.add_argument("--shift-blocks", action=argparse.BooleanOptionalAction, default=True,
+                   help="move the coarse blocks by a random offset every step (--no-shift-blocks: fixed blocks)")
     p.add_argument("--batch", type=int, default=8)
     p.add_argument("--damage", type=int, default=0,
                    help="erase a random ball from this many of the best samples each step (regeneration training)")
@@ -137,8 +157,7 @@ def main() -> None:
 
     target = make_target(args.target, args.ndim, args.side, radius, args.thickness)
     grid = (args.side,) * args.ndim
-    model = nca.NCA(args.ndim, args.channels, args.hidden, perception=args.perception, padding=args.padding,
-                    skip_dead=not args.dense, compile=not args.no_compile)
+    model = build_model(vars(args), args.padding, compile=not args.no_compile)
     seed_state = model.seed(grid)[0]
     pool = seed_state.expand(args.pool, *seed_state.shape).clone()
     reduce_dims = tuple(range(1, args.ndim + 2))
@@ -147,7 +166,8 @@ def main() -> None:
     lr_drop = args.lr_drop or (2 * args.steps) // 3
     sched = torch.optim.lr_scheduler.MultiStepLR(opt, milestones=[lr_drop], gamma=0.1)
     save_atlas(torch.cat([target, torch.zeros(args.channels - 4, *grid)]), out / "target.png")
-    config = vars(args) | {"radius": radius, "out": str(out), "lr_drop": lr_drop}
+    config = vars(args) | {"radius": radius, "out": str(out), "lr_drop": lr_drop,
+                           "params": sum(prm.numel() for prm in model.parameters())}
     (out / "config.json").write_text(json.dumps(config, indent=2))
     print(config, flush=True)
 

@@ -3,7 +3,8 @@
     .venv/bin/python serve.py            # then open http://localhost:8000/viewer/
 
 Serves the project folder on 127.0.0.1 only, plus /api/runs, which lists every
-runs/**/growth_rgba.npy so the viewer can offer them in a menu.
+runs/**/growth_rgba.npy (recordings) and target_rgba.npy (exact targets), with
+tree.json layouts, so the viewer can offer them in a menu.
 """
 
 from __future__ import annotations
@@ -20,12 +21,20 @@ ROOT = Path(__file__).resolve().parent
 
 
 def list_runs() -> list[dict]:
+    """Every recording (growth_rgba.npy) and exact target (target_rgba.npy) under runs/.
+    A tree.json next to the file marks a branching layout and is passed to the viewer."""
     runs = []
-    for f in sorted((ROOT / "runs").glob("**/growth_rgba.npy")):
+    for f in sorted((ROOT / "runs").glob("**/*_rgba.npy")):
+        if f.name not in ("growth_rgba.npy", "target_rgba.npy"):
+            continue
         shape = np.load(f, mmap_mode="r").shape  # (T, *grid, 4)
-        runs.append({"name": str(f.parent.relative_to(ROOT / "runs")),
-                     "path": "/" + str(f.relative_to(ROOT)),
-                     "grid": list(shape[1:-1]), "frames": shape[0]})
+        name = str(f.parent.relative_to(ROOT / "runs"))
+        entry = {"name": name + (" (target)" if f.name == "target_rgba.npy" else ""),
+                 "path": "/" + str(f.relative_to(ROOT)), "grid": list(shape[1:-1]), "frames": shape[0]}
+        tree = f.parent / "tree.json"
+        if tree.exists():
+            entry["tree"] = json.loads(tree.read_text())
+        runs.append(entry)
     return runs
 
 
