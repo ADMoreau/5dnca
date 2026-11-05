@@ -4,8 +4,9 @@ __pycache__/
 .pytest_cache/
 *.pyc
 
-# Training outputs (models, logs, recordings); regenerate with train*.py
-runs/
+# Training outputs: models, logs, metrics and images are kept. The recordings
+# (*.npy, up to 180 MB each) are too big for GitHub; retrain or rerun eval_world.py.
+runs/**/*.npy
 
 # Editors / OS
 .vscode/

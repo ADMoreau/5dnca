@@ -1,0 +1,15 @@
+{'step': 0, 'alpha_vs_3_shapes': 0.001, 'components': 3, 'touches_world_edge': False}
+{'step': 25, 'alpha_vs_3_shapes': 1.003, 'components': 3, 'touches_world_edge': False}
+{'step': 50, 'alpha_vs_3_shapes': 1.034, 'components': 3, 'touches_world_edge': False}
+{'step': 75, 'alpha_vs_3_shapes': 1.047, 'components': 3, 'touches_world_edge': False}
+{'step': 100, 'alpha_vs_3_shapes': 1.046, 'components': 3, 'touches_world_edge': False}
+{'step': 125, 'alpha_vs_3_shapes': 1.041, 'components': 3, 'touches_world_edge': False}
+{'step': 150, 'alpha_vs_3_shapes': 1.05, 'components': 3, 'touches_world_edge': False}
+{'step': 175, 'alpha_vs_3_shapes': 1.06, 'components': 3, 'touches_world_edge': False}
+{'step': 199, 'alpha_vs_3_shapes': 1.054, 'components': 3, 'touches_world_edge': False}
+{'step': 200, 'alpha_vs_3_shapes': 0.904, 'components': 3, 'touches_world_edge': False}
+{'step': 225, 'alpha_vs_3_shapes': 1.072, 'components': 3, 'touches_world_edge': False}
+{'step': 250, 'alpha_vs_3_shapes': 1.061, 'components': 3, 'touches_world_edge': False}
+{'step': 275, 'alpha_vs_3_shapes': 1.055, 'components': 3, 'touches_world_edge': False}
+{'step': 300, 'alpha_vs_3_shapes': 1.066, 'components': 3, 'touches_world_edge': False}
+{'world': (16, 24, 24, 24), 'seeds': [(8, 12, 7, 7), (8, 12, 7, 17), (8, 12, 17, 12)], 'one_shape_alpha': 780.3, 'damage_at': 200, 'record_every': 3, 'sec_per_step': 0.115}

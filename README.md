@@ -64,6 +64,8 @@ Each run writes to `runs/<name>/`:
 - snapshot images
 - `growth_rgba.npy`: every step grown from one seed, as uint8 `(T, *grid, 4)`. The viewer lists these automatically.
 
+The runs in this repository keep their models, logs, metrics and images, but not the `growth_rgba.npy` recordings, which are too big for GitHub (up to 180 MB each). `eval_world.py runs/<name>` makes a new recording from a saved ball model; the others come from retraining.
+
 ## Layout
 
 | File | What it does |

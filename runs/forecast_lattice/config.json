@@ -1,0 +1,58 @@
+{
+  "mode": "lattice",
+  "candidates": 4,
+  "two_way": false,
+  "obs_max": 2,
+  "e_min": 0.2,
+  "e_max": 0.95,
+  "holdout": [
+    0.55,
+    0.7
+  ],
+  "steps": 1000,
+  "min_iters": 64,
+  "max_iters": 96,
+  "lr_drop": 666,
+  "channels": 16,
+  "hidden": 128,
+  "perception": "sobel",
+  "batch": 4,
+  "pool": 256,
+  "no_compile": false,
+  "no_checkpoint": false,
+  "threads": 8,
+  "seed": 0,
+  "log_every": 25,
+  "snap_every": 100,
+  "eval_steps": 128,
+  "bench": 0,
+  "eval_only": false,
+  "out": "runs/forecast_lattice",
+  "bounce": {
+    "X": 16,
+    "Y": 12,
+    "Z": 8,
+    "W": 24,
+    "radius": 2.0,
+    "drop_height": 9.0,
+    "impact_w": 8.0,
+    "x_start": 2.5,
+    "x_end": 13.5,
+    "bounciness": [
+      0.3,
+      0.5,
+      0.7,
+      0.9
+    ]
+  },
+  "grid": [
+    4,
+    24,
+    8,
+    12,
+    16
+  ],
+  "fork_w": 9,
+  "n_trained_e": 120,
+  "n_held_out_e": 31
+}

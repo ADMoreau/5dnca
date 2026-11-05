@@ -1,0 +1,2 @@
+{'ndim': 5, 'side': 10, 'target': 'ball', 'radius': 3.5, 'thickness': 2.0, 'steps': 1000, 'min_iters': 24, 'max_iters': 40, 'lr_drop': 666, 'channels': 16, 'hidden': 128, 'perception': 'sobel', 'padding': 'circular', 'batch': 8, 'damage': 2, 'pool': 256, 'dense': False, 'no_compile': False, 'checkpoint': True, 'threads': 8, 'seed': 0, 'log_every': 25, 'snap_every': 250, 'grow_steps': 150, 'out': 'runs/ball5d_s10_r35_wrap'}
+{'step': 1, 'loss': 0.009384218603372574, 'log10': -2.028, 'sec': 50.5}

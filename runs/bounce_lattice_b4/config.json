@@ -1,0 +1,52 @@
+{
+  "mode": "lattice",
+  "steps": 1000,
+  "min_iters": 64,
+  "max_iters": 96,
+  "lr_drop": 666,
+  "channels": 16,
+  "hidden": 128,
+  "perception": "sobel",
+  "batch": 4,
+  "pool": 256,
+  "no_compile": false,
+  "no_checkpoint": false,
+  "threads": 8,
+  "seed": 0,
+  "log_every": 25,
+  "snap_every": 100,
+  "grow_steps": 300,
+  "bench": 0,
+  "out": "runs/bounce_lattice_b4",
+  "bounce": {
+    "X": 16,
+    "Y": 12,
+    "Z": 8,
+    "W": 24,
+    "radius": 2.0,
+    "drop_height": 9.0,
+    "impact_w": 8.0,
+    "x_start": 2.5,
+    "x_end": 13.5,
+    "bounciness": [
+      0.3,
+      0.5,
+      0.7,
+      0.9
+    ]
+  },
+  "grid": [
+    4,
+    24,
+    8,
+    12,
+    16
+  ],
+  "fork_w": 9,
+  "seed_zyx": [
+    3,
+    2,
+    2
+  ],
+  "cells": 147456
+}

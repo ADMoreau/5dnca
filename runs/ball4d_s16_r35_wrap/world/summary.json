@@ -1,0 +1,118 @@
+{
+  "world": [
+    16,
+    24,
+    24,
+    24
+  ],
+  "seeds": [
+    [
+      8,
+      12,
+      7,
+      7
+    ],
+    [
+      8,
+      12,
+      7,
+      17
+    ],
+    [
+      8,
+      12,
+      17,
+      12
+    ]
+  ],
+  "one_shape_alpha": 780.3,
+  "damage_at": 200,
+  "record_every": 3,
+  "sec_per_step": 0.049,
+  "log": [
+    {
+      "step": 0,
+      "alpha_vs_3_shapes": 0.001,
+      "components": 3,
+      "touches_world_edge": false
+    },
+    {
+      "step": 25,
+      "alpha_vs_3_shapes": 0.958,
+      "components": 3,
+      "touches_world_edge": false
+    },
+    {
+      "step": 50,
+      "alpha_vs_3_shapes": 0.973,
+      "components": 3,
+      "touches_world_edge": false
+    },
+    {
+      "step": 75,
+      "alpha_vs_3_shapes": 0.98,
+      "components": 3,
+      "touches_world_edge": false
+    },
+    {
+      "step": 100,
+      "alpha_vs_3_shapes": 0.984,
+      "components": 3,
+      "touches_world_edge": false
+    },
+    {
+      "step": 125,
+      "alpha_vs_3_shapes": 0.985,
+      "components": 3,
+      "touches_world_edge": false
+    },
+    {
+      "step": 150,
+      "alpha_vs_3_shapes": 0.985,
+      "components": 3,
+      "touches_world_edge": false
+    },
+    {
+      "step": 175,
+      "alpha_vs_3_shapes": 0.986,
+      "components": 3,
+      "touches_world_edge": false
+    },
+    {
+      "step": 199,
+      "alpha_vs_3_shapes": 0.986,
+      "components": 3,
+      "touches_world_edge": false
+    },
+    {
+      "step": 200,
+      "alpha_vs_3_shapes": 0.828,
+      "components": 3,
+      "touches_world_edge": false
+    },
+    {
+      "step": 225,
+      "alpha_vs_3_shapes": 0.894,
+      "components": 3,
+      "touches_world_edge": false
+    },
+    {
+      "step": 250,
+      "alpha_vs_3_shapes": 0.911,
+      "components": 3,
+      "touches_world_edge": false
+    },
+    {
+      "step": 275,
+      "alpha_vs_3_shapes": 0.916,
+      "components": 3,
+      "touches_world_edge": false
+    },
+    {
+      "step": 300,
+      "alpha_vs_3_shapes": 0.918,
+      "components": 3,
+      "touches_world_edge": false
+    }
+  ]
+}

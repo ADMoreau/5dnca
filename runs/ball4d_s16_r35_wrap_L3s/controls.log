@@ -1,0 +1,24 @@
+===== runs/ball4d_s16_r35_wrap_L3s
+-- training grid 16^4, one ball (log10 MSE vs target moved with the seed)
+   circular seed (8, 8, 8, 8)  alpha 1.003  log10 mse -5.21
+   circular seed (8, 8, 8, 9)  alpha 0.996  log10 mse -4.94
+   circular seed (8, 8, 9, 9)  alpha 1.004  log10 mse -4.89
+   circular seed (8, 9, 9, 9)  alpha 1.002  log10 mse -4.92
+   circular seed (9, 9, 9, 9)  alpha 1.003  log10 mse -4.93
+   circular seed (8, 10, 10, 10)  alpha 1.004  log10 mse -5.12
+   circular seed (8, 11, 11, 11)  alpha 1.009  log10 mse -4.94
+   circular seed (8, 12, 12, 12)  alpha 1.003  log10 mse -5.18
+   zeros    seed (8, 8, 8, 8)  alpha 1.000  log10 mse -5.22
+   zeros    seed (8, 9, 9, 9)  alpha 0.999  log10 mse -4.92
+-- world (16, 24, 24, 24), the test's three seed positions
+   zeros    all three together : [0.916, 1.04, 1.173]
+   zeros    each one alone     : [0.996, 0.998, 0.998]
+   circular all three together : [0.934, 1.051, 1.175]
+   circular each one alone     : [0.997, 0.999, 0.998]
+-- world, one ball at other positions
+   zeros    seed (8, 10, 10, 10): 0.998
+   zeros    seed (8, 14, 14, 14): 0.998
+   zeros    seed (8, 12, 12, 12): 1.002
+   circular seed (8, 10, 10, 10): 0.998
+   circular seed (8, 14, 14, 14): 0.999
+   circular seed (8, 12, 12, 12): 1.002
